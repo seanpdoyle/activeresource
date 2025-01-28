@@ -44,6 +44,25 @@ class FormatTest < ActiveSupport::TestCase
     end
   end
 
+  def test_multipart_form_formats_on_collection
+    [ :json, :xml ].each do |format|
+      using_format(Person, multipart_form: format) do
+        ActiveResource::HttpMock.respond_to.post "/people.#{format}", { "Content-Type" => "multipart/form-data" }, ActiveResource::Formats[format].encode(@matz)
+        file = File.new("./test/fixtures/files/file.txt")
+        address = StreetAddress.new(street: "12345 Street", country: "Australia")
+        person = Person.create(name: "Matz", notes: file, address: address)
+
+        body = ActiveResource::HttpMock.requests.last.body.to_h
+        assert_equal 1, person.id
+        assert_equal "Matz", person.name
+        assert_equal "Matz", body["name"]
+        assert_equal address.street, body["address[street]"]
+        assert_equal address.country, body["address[country]"]
+        assert_equal file.read, body["notes"].tap(&:rewind).read
+      end
+    end
+  end
+
   def test_formats_on_custom_collection_method
     [ :json, :xml ].each do |format|
       using_format(Person, format) do

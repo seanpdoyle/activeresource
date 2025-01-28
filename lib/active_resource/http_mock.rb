@@ -287,7 +287,7 @@ module ActiveResource
 
     def request(http) # :nodoc:
       request = Request.new(HTTP_METHODS[http.class], http.path, nil, http.each_capitalized.to_h)
-      request.body = http.body if http.request_body_permitted?
+      request.body = http.instance_values["body_data"] || http.body if http.request_body_permitted?
 
       process(request)
     end

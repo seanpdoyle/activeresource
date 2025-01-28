@@ -101,19 +101,19 @@ module ActiveResource
     # Executes a PATCH request (see HTTP protocol documentation if unfamiliar).
     # Used to update resources.
     def patch(path, body = "", headers = {})
-      with_auth { request(:patch, path, body.to_s, headers) }
+      with_auth { request(:patch, path, body, headers) }
     end
 
     # Executes a PUT request (see HTTP protocol documentation if unfamiliar).
     # Used to update resources.
     def put(path, body = "", headers = {})
-      with_auth { request(:put, path, body.to_s, headers) }
+      with_auth { request(:put, path, body, headers) }
     end
 
     # Executes a POST request.
     # Used to create new resources.
     def post(path, body = "", headers = {})
-      with_auth { request(:post, path, body.to_s, headers) }
+      with_auth { request(:post, path, body, headers) }
     end
 
     # Executes a HEAD request.
@@ -127,13 +127,12 @@ module ActiveResource
       def request(method, path, *arguments)
         body, headers = arguments
         headers, body = body, nil if headers.nil?
-        request       = build_request(method, path, headers)
-        request.body  = body
+        request       = build_request(method, path, headers, body)
         result = ActiveSupport::Notifications.instrument("request.active_resource") do |payload|
           payload[:method]      = method
           payload[:request_uri] = request.uri.to_s
           payload[:headers]     = request.each_capitalized.to_h
-          payload[:body]        = body
+          payload[:body]        = request.body
           payload[:result]      = http.request(request)
         end
         handle_response(result)
@@ -229,12 +228,17 @@ module ActiveResource
         @default_header ||= {}
       end
 
-      def build_request(http_method, path, headers)
+      def build_request(http_method, path, headers, body)
         HTTP_METHODS[http_method].new(site.merge(path)).tap do |request|
           headers = build_request_headers(headers, http_method, request.uri)
 
           request.each_name { |name| request.delete(name) }
           headers.each_pair { |name, value| request[name] = value }
+
+          case body
+          when Array then request.set_form(body, format.mime_type)
+          else request.body = body
+          end
         end
       end
 

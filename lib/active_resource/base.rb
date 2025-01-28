@@ -643,7 +643,7 @@ module ActiveResource
       #
       # Default format is <tt>:json</tt>.
       def format=(mime_type_reference_or_format)
-        format = mime_type_reference_or_format.is_a?(Symbol) ?
+        format = mime_type_reference_or_format.is_a?(Symbol) || mime_type_reference_or_format.is_a?(Hash) ?
           ActiveResource::Formats[mime_type_reference_or_format] : mime_type_reference_or_format
 
         self._format = format
