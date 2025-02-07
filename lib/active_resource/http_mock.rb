@@ -30,6 +30,8 @@ module ActiveResource
   # * <tt>response_headers</tt> - Headers to be returned with the response. Uses the same hash format as
   #   <tt>request_headers</tt> listed above.
   #
+  # Each method also accepts a block to call with matching requests
+  #
   # In order for a mock to deliver its content, the incoming request must match by the <tt>http_method</tt>,
   # +path+ and <tt>request_headers</tt>. If no match is found an +InvalidRequestError+ exception
   # will be raised showing you what request it could not find a response for and also what requests and response
@@ -62,9 +64,10 @@ module ActiveResource
         #   @responses[Request.new(:post, path, nil, request_headers, options)] = Response.new(body || "", status, response_headers)
         # end
         module_eval <<-EOE, __FILE__, __LINE__ + 1
-          def #{method}(path, request_headers = {}, body = nil, status = 200, response_headers = {}, options = {})
+          def #{method}(path, request_headers = {}, body = nil, status = 200, response_headers = {}, options = {}, &response)
+            options  = body if response
             request  = Request.new(:#{method}, path, nil, request_headers, options)
-            response = Response.new(body || "", status, response_headers)
+            response = Response.new(body || "", status, response_headers) unless response
 
             delete_duplicate_responses(request)
 
@@ -154,12 +157,12 @@ module ActiveResource
       # === Example
       #
       #   ActiveResource::HttpMock.respond_to do |mock|
-      #     mock.send(:get, "/people/1", {}, "JSON1")
+      #     mock.get("/people/1", {}, "JSON1")
       #   end
       #   ActiveResource::HttpMock.responses.length #=> 1
       #
       #   ActiveResource::HttpMock.respond_to(false) do |mock|
-      #     mock.send(:get, "/people/2", {}, "JSON2")
+      #     mock.get("/people/2", {}, "JSON2")
       #   end
       #   ActiveResource::HttpMock.responses.length #=> 2
       #
@@ -169,7 +172,7 @@ module ActiveResource
       # === Example
       #
       #   ActiveResource::HttpMock.respond_to do |mock|
-      #     mock.send(:get, "/people/1", {}, "JSON1")
+      #     mock.get("/people/1", {}, "JSON1")
       #   end
       #   ActiveResource::HttpMock.responses.length #=> 1
       #
@@ -248,7 +251,10 @@ module ActiveResource
         #   request = ActiveResource::Request.new(:post, path, body, headers, options)
         #   self.class.requests << request
         #   if response = self.class.responses.assoc(request)
-        #     response[1]
+        #     response = response[1]
+        #     response = response.call(request) if response.respond_to?(:call)
+        #
+        #     Response.wrap(response)
         #   else
         #     raise InvalidRequestError.new("Could not find a response recorded for #{request.to_s} - Responses recorded are: - #{inspect_responses}")
         #   end
@@ -258,7 +264,10 @@ module ActiveResource
             request = ActiveResource::Request.new(:#{method}, path, #{has_body ? 'body, ' : 'nil, '}headers, options)
             self.class.requests << request
             if response = self.class.responses.assoc(request)
-              response[1]
+              response = response[1]
+              response = response.call(request) if response.respond_to?(:call)
+
+              Response.wrap(response)
             else
               raise InvalidRequestError.new("Could not find a response recorded for \#{request.to_s} - Responses recorded are: \#{inspect_responses}")
             end
@@ -320,6 +329,19 @@ module ActiveResource
 
   class Response
     attr_accessor :body, :message, :code, :headers
+
+    def self.wrap(response)
+      case response
+      when self then response
+      when Array then self[*response]
+      when String then new(response)
+      else new(nil)
+      end
+    end
+
+    def self.[](code, headers, body)
+      new(body, code, headers)
+    end
 
     def initialize(body, message = 200, headers = {})
       @body, @message, @headers = body, message.to_s, headers

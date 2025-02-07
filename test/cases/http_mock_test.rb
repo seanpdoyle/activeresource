@@ -2,6 +2,7 @@
 
 require "abstract_unit"
 require "active_support/core_ext/object/inclusion"
+require "active_resource/http_mock"
 
 class HttpMockTest < ActiveSupport::TestCase
   setup do
@@ -17,6 +18,40 @@ class HttpMockTest < ActiveSupport::TestCase
       end
 
       assert_equal "Response", request(method, "/people/1", FORMAT_HEADER[method] => "application/json").body
+    end
+
+    test "responds to #{method} request with a block that returns a String" do
+      ActiveResource::HttpMock.respond_to do |mock|
+        mock.send(method, "/people/1", { FORMAT_HEADER[method] => "application/json" }) do
+          "Response"
+        end
+      end
+
+      assert_equal "Response", request(method, "/people/1", { FORMAT_HEADER[method] => "application/json" }, "Request").body
+    end
+
+    test "responds to #{method} request with a block that returns an ActiveResource::Response" do
+      ActiveResource::HttpMock.respond_to do |mock|
+        mock.send(method, "/people/1", { FORMAT_HEADER[method] => "application/json" }) do
+          ActiveResource::Response.new("Response")
+        end
+      end
+
+      assert_equal "Response", request(method, "/people/1", { FORMAT_HEADER[method] => "application/json" }, "Request").body
+    end
+
+    test "responds to #{method} request with a block that returns a Rack triplet" do
+      ActiveResource::HttpMock.respond_to do |mock|
+        mock.send(method, "/people/1", { FORMAT_HEADER[method] => "application/json" }) do
+          [ 204, { "Content-Type" => "text/plain" }, "" ]
+        end
+      end
+
+      response = request(method, "/people/1", { FORMAT_HEADER[method] => "application/json" }, "Request")
+
+      assert_equal 204, response.code
+      assert_equal "text/plain", response.headers["Content-Type"]
+      assert_nil response.body
     end
 
     test "adds format header by default to #{method} request" do
@@ -71,6 +106,18 @@ class HttpMockTest < ActiveSupport::TestCase
       assert_raise(::ActiveResource::InvalidRequestError) do
         request(method, "/people/1", FORMAT_HEADER[method] => "application/xml")
       end
+    end
+
+    test "yields request to the #{method} mock block" do
+      ActiveResource::HttpMock.respond_to do |mock|
+        mock.send(method, "/people/1") do |request|
+          assert_kind_of ActiveResource::Request, request
+
+          ActiveResource::Response.new("Response")
+        end
+      end
+
+      assert_equal "Response", request(method, "/people/1").body
     end
   end
 
@@ -203,11 +250,73 @@ class HttpMockTest < ActiveSupport::TestCase
     assert_equal "Response", response.body
   end
 
+  test "can ignore query params when yielding get request to the block" do
+    ActiveResource::HttpMock.respond_to do |mock|
+      mock.get "/people/1", {}, omit_query_in_path: true do |request|
+        assert_kind_of ActiveResource::Request, request
+
+        ActiveResource::Response.new(request.path)
+      end
+    end
+
+    assert_equal "/people/1?key=value", request(:get, "/people/1?key=value").body
+  end
+
+  test "can map a request to a block" do
+    request = ActiveResource::Request.new(:get, "/people/1", nil, {}, omit_query_in_path: true)
+    response = ->(req) { ActiveResource::Response.new(req.path) }
+
+    ActiveResource::HttpMock.respond_to(request => response)
+
+    assert_equal "/people/1?key=value", request(:get, "/people/1?key=value").body
+  end
+
   def request(method, path, headers = {}, body = nil)
     if method.in?([ :patch, :put, :post ])
       @http.send(method, path, body, headers)
     else
       @http.send(method, path, headers)
     end
+  end
+end
+
+class ResponseTest < ActiveSupport::TestCase
+  test ".wrap returns the same Response instance" do
+    response = ActiveResource::Response.new("hello")
+
+    assert_same response, ActiveResource::Response.wrap(response)
+  end
+
+  test ".wrap returns a Response instance from a Rack triplet" do
+    response = ActiveResource::Response.wrap([ 201, { "Location" => "/posts/1.json" }, "created" ])
+
+    assert_equal 201, response.code
+    assert_equal "/posts/1.json", response["Location"]
+    assert_equal "created", response.body
+    assert_equal "created".size, response["Content-Length"].to_i
+  end
+
+  test ".wrap returns a Response instance from a String" do
+    response = ActiveResource::Response.wrap("hello")
+
+    assert_equal 200, response.code
+    assert_equal "hello", response.body
+    assert_equal "hello".size, response["Content-Length"].to_i
+  end
+
+  test ".wrap returns a Response instance from other values" do
+    [ nil, Object.new ].each do |value|
+      response = ActiveResource::Response.wrap(value)
+
+      assert_equal 200, response.code
+      assert_equal nil, response.body
+      assert_equal 0, response["Content-Length"].to_i
+    end
+  end
+
+  test ".[] initializes a Response from a Rack triplet" do
+    assert_equal ActiveResource::Response.new("hello"), ActiveResource::Response[200, {}, "hello"]
+    assert_equal ActiveResource::Response.new(nil, 204), ActiveResource::Response[204, {}, nil]
+    assert_equal ActiveResource::Response.new(nil, 204, "Content-Type" => "application/json"), ActiveResource::Response[204, { "Content-Type" => "application/json" }, nil]
   end
 end
