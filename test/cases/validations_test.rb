@@ -8,6 +8,14 @@ require "active_support/core_ext/hash/conversions"
 # This test case simply makes sure that they are all accessible by
 # Active Resource objects.
 class ValidationsTest < ActiveSupport::TestCase
+  class ProjectManager < ActiveResource::Base
+    self.site = "http://example.com"
+
+    has_many :projects
+
+    validates_associated :projects
+  end
+
   VALID_PROJECT_HASH = { name: "My Project", description: "A project" }
   def setup
     @my_proj = { "person" => VALID_PROJECT_HASH }.to_json
@@ -66,6 +74,23 @@ class ValidationsTest < ActiveSupport::TestCase
     p = new_project(name: nil)
 
     assert_raise(ActiveModel::ValidationError) { p.validate! }
+  end
+
+  def test_validate_associated
+    project_manager = ProjectManager.new(projects: [ new_project(name: "", description: "ab") ])
+
+    assert_not_predicate project_manager, :valid?
+    assert_not_empty project_manager.errors.messages_for(:projects)
+    assert_equal [ "can't be blank" ], project_manager.projects.first.errors.messages_for(:name)
+    assert_equal [ "must be greater than three letters long" ], project_manager.projects.first.errors.messages_for(:description)
+  end
+
+  def test_validate_associated_with_context
+    project_manager = ProjectManager.new(projects: [ new_project(summary: "") ])
+
+    assert_not project_manager.valid?(:completed)
+    assert_not_empty project_manager.errors.messages_for(:projects)
+    assert_equal [ "can't be blank" ], project_manager.projects.first.errors.messages_for(:summary)
   end
 
   protected
