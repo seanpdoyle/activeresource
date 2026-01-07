@@ -62,10 +62,52 @@ class ValidationsTest < ActiveSupport::TestCase
     assert_not p.invalid?
   end
 
+  def test_invalid_removes_remote_errors
+    ActiveResource::HttpMock.respond_to.post "/projects.json", {}, { errors: { name: [ "is taken" ] } }.to_json, 422
+    project = new_project name: "taken"
+
+    assert_raises ActiveResource::ResourceInvalid do
+      project.save!
+    end
+
+    project.name = "unique"
+
+    assert_not_predicate project, :invalid?
+    assert_nil project.instance_variable_get(:@remote_errors)
+  end
+
   def test_validate_bang_method
     p = new_project(name: nil)
 
     assert_raise(ActiveModel::ValidationError) { p.validate! }
+  end
+
+  def test_validate_removes_remote_errors
+    ActiveResource::HttpMock.respond_to.post "/projects.json", {}, { errors: { name: [ "is taken" ] } }.to_json, 422
+    project = new_project name: "taken"
+
+    assert_raises ActiveResource::ResourceInvalid do
+      project.save!
+    end
+
+    project.name = "unique"
+
+    assert_predicate project, :validate
+    assert_nil project.instance_variable_get(:@remote_errors)
+  end
+
+  def test_valid_removes_remote_errors
+    ActiveResource::HttpMock.respond_to.post "/projects.json", {}, { errors: { name: [ "is taken" ] } }.to_json, 422
+    project = new_project name: "taken"
+
+    assert_raises ActiveResource::ResourceInvalid do
+      project.save!
+    end
+
+    project.name = "unique"
+
+    assert_predicate project, :valid?
+    assert_nil project.instance_variable_get(:@remote_errors)
   end
 
   protected

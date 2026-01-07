@@ -81,6 +81,14 @@ module ActiveResource
         from_hash errors, save_cache
       end
     end
+
+    # Clears all errors, including remote errors from a response.
+    #
+    # See ActiveModel::Validations for more information.
+    def clear
+      @base.clear_remote_errors
+      super
+    end
   end
 
   # ActiveResource::ErrorsParser is a wrapper to handle parsing responses in
@@ -303,6 +311,10 @@ module ActiveResource
     # content-type of the error-block received.
     def load_remote_errors(remote_errors, save_cache = false) # :nodoc:
       errors.from_body(remote_errors.response.body, save_cache)
+    end
+
+    def clear_remote_errors # :nodoc:
+      @remote_errors = nil
     end
 
     # Checks for errors on an object (i.e., is resource.errors empty?).
