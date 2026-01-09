@@ -94,6 +94,7 @@ module ActiveResource
     # Returns nil when passed nil
     def dump(value)
       return if value.nil?
+      value = value.collection if collection && value.is_a?(Relation)
 
       expected_class = collection ? resource_class.collection_parser : resource_class
       raise ArgumentError.new("expected value to be #{expected_class}, but was #{value.class}") unless value.is_a?(expected_class)

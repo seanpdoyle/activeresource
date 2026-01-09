@@ -111,6 +111,7 @@ class CollectionInheritanceTest < ActiveSupport::TestCase
   def test_where
     posts = PaginatedPost.where(page: 2)
     next_posts = posts.where(title: "Awesome")
-    assert_kind_of PaginatedCollection, next_posts
+    assert_kind_of PaginatedCollection, next_posts.collection
+    assert_kind_of ActiveResource::Relation, next_posts
   end
 end

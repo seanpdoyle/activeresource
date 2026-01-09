@@ -43,6 +43,7 @@ module ActiveResource
   autoload :CustomMethods
   autoload :Formats
   autoload :HttpMock
+  autoload :Relation
   autoload :Rescuable
   autoload :Schema
   autoload :Serialization
@@ -50,9 +51,6 @@ module ActiveResource
   autoload :InheritingHash
   autoload :Validations
   autoload :Collection
-  eager_autoload do
-    autoload :WhereClause
-  end
 
   if ActiveSupport::VERSION::STRING >= "7.1"
     def self.deprecator
